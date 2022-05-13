@@ -10,12 +10,12 @@ use blog_os::println;
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     test_main();
-    loop {}
+    loop { x86_64::instructions::hlt() }
 }
 
 #[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    loop {}
+fn panic(_info: &PanicInfo) -> ! {
+    loop { x86_64::instructions::hlt() }
 }
 
 #[test_case]
