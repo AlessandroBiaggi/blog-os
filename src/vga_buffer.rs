@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 
 use volatile::Volatile;
-use core::fmt::{self, Write};
+use core::fmt;
 use lazy_static::lazy_static;
-use spin::Mutex;
+use spin;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -120,7 +120,7 @@ impl fmt::Write for Writer {
 }
 
 lazy_static!{
-    pub static ref WRITER: Mutex<Writer> = Mutex::new(Writer {
+    pub static ref WRITER: spin::Mutex<Writer> = spin::Mutex::new(Writer {
         column_position: 0,
         color_code: ColorCode::new(Color::Yellow, Color::Black),
         buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
@@ -140,6 +140,8 @@ pub fn print_something() {
 
     writer.write_byte(b'H');
     writer.write_string("ello! ");
+
+    use fmt::Write;
     write!(writer, "The numbers are {} and {}", 42, 1.0 / 3.0).unwrap();
 }
 
@@ -156,7 +158,12 @@ macro_rules! println {
 
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
-    WRITER.lock().write_fmt(args).unwrap();
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        use fmt::Write;
+        WRITER.lock()
+            .write_fmt(args)
+            .expect("Print to vga buffer failed");
+    });
 }
 
 #[test_case]
@@ -174,9 +181,15 @@ fn test_println_many() {
 #[test_case]
 fn test_println_output() {
     let s = "Some test string that fits on a single line";
-    println!("{}", s);
-    for (i, c) in s.chars().enumerate() {
-        let screen_char = WRITER.lock().buffer.chars[BUFFER_HEIGHT - 2][i].read();
-        assert_eq!(char::from(screen_char.character), c);
-    }
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        let mut writer = WRITER.lock();
+
+        use core::fmt::Write;
+        writeln!(writer, "\n{}", s).expect("writeln! failed");
+
+        for (i, c) in s.chars().enumerate() {
+            let screen_char = writer.buffer.chars[BUFFER_HEIGHT - 2][i].read();
+            assert_eq!(char::from(screen_char.character), c);
+        }
+    });
 }
