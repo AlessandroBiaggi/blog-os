@@ -8,10 +8,12 @@
 pub mod vga_buffer;
 pub mod serial;
 pub mod interrupts;
+pub mod gdt;
 
 use core::panic::PanicInfo;
 
 pub fn init() {
+    gdt::init();
     interrupts::init_idt();
 }
 
@@ -32,7 +34,7 @@ impl<T> Testable for T
 
 pub fn test_runner(tests: &[&dyn Testable]) {
     serial_println!("Running {} test(s)", tests.len());
-    for t in tests {
+    for &t in tests {
         t.run();
     }
 
