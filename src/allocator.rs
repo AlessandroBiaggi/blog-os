@@ -9,10 +9,14 @@ use x86_64::{
         Size4KiB,
     },
 };
-use linked_list_allocator::LockedHeap;
+
+pub mod bump;
+pub mod linked_list;
+pub mod fixed_size_block;
+use fixed_size_block::FixedSizeBlockAllocator;
 
 #[global_allocator]
-static ALLOCATOR: LockedHeap = LockedHeap::empty();
+static ALLOCATOR: Locked<FixedSizeBlockAllocator> = Locked::new(FixedSizeBlockAllocator::new());
 
 pub const HEAP_START: usize = 0x_4444_4444_0000;
 pub const HEAP_SIZE: usize = 100 * 1024; // 100 KiB
@@ -40,4 +44,23 @@ pub fn init_heap(mapper: &mut impl Mapper<Size4KiB>, frame_allocator: &mut impl 
     }
 
     Ok(())
+}
+
+pub struct Locked<A> {
+    inner: spin::Mutex<A>,
+}
+
+impl<A> Locked<A> {
+    pub const fn new(inner: A) -> Self {
+        Self { inner: spin::Mutex::new(inner) }
+    }
+
+    pub fn lock(&self) -> spin::MutexGuard<A> {
+        self.inner.lock()
+    }
+}
+
+/// Requires that `align` is a power of 2
+unsafe fn align_up(addr: usize, align: usize) -> usize {
+    (addr + align - 1) & !(align - 1)
 }
